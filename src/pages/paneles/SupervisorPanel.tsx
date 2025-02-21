@@ -121,19 +121,62 @@ const SupervisorPanel = () => {
   };
 
   const handleUpdateLimite = async () => {
-    if (!editingPromotor) return;
+    if (!editingPromotor || nuevoLimite <= 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "El límite debe ser mayor a 0",
+      });
+      return;
+    }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { error } = await supabase
+      // Primero verificamos si hay una asignación existente
+      const { data: existingAssignment, error: checkError } = await supabase
         .from('asignaciones')
-        .update({ limite_afiliados: nuevoLimite })
+        .select('*')
         .eq('promotor_id', editingPromotor.promotorId)
-        .eq('supervisor_id', user.id);
+        .eq('supervisor_id', user.id)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 es el código para "no se encontraron resultados"
+        throw checkError;
+      }
+
+      let error;
+      if (!existingAssignment) {
+        // Si no existe, creamos una nueva asignación
+        const { error: insertError } = await supabase
+          .from('asignaciones')
+          .insert([{
+            supervisor_id: user.id,
+            promotor_id: editingPromotor.promotorId,
+            limite_afiliados: nuevoLimite
+          }]);
+        error = insertError;
+      } else {
+        // Si existe, actualizamos el límite
+        const { error: updateError } = await supabase
+          .from('asignaciones')
+          .update({ limite_afiliados: nuevoLimite })
+          .eq('promotor_id', editingPromotor.promotorId)
+          .eq('supervisor_id', user.id);
+        error = updateError;
+      }
 
       if (error) throw error;
+
+      // Actualizamos el estado local inmediatamente
+      setAfiliados(prevAfiliados => 
+        prevAfiliados.map(promotor => 
+          promotor.promotorId === editingPromotor.promotorId
+            ? { ...promotor, limiteAfiliados: nuevoLimite }
+            : promotor
+        )
+      );
 
       toast({
         title: "Límite actualizado",
@@ -141,14 +184,19 @@ const SupervisorPanel = () => {
       });
 
       setEditingPromotor(null);
-      fetchAfiliados();
+      setNuevoLimite(0);
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message,
+        description: error.message || "No se pudo actualizar el límite",
       });
     }
+  };
+
+  const handleEditPromotor = (promotor: any) => {
+    setEditingPromotor(promotor);
+    setNuevoLimite(promotor.limiteAfiliados);
   };
 
   const getTotalAfiliados = () => {
@@ -221,88 +269,128 @@ const SupervisorPanel = () => {
   const mejorPromotor = getMejorPromotor();
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-900">
       <Header />
-      
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">Panel de Supervisor</h1>
-          <Button onClick={printPromotores}>
-            <Printer className="h-4 w-4 mr-2" />
-            Imprimir reporte
-          </Button>
+      <div className="container mx-auto p-4">
+        <div className="flex flex-col gap-4 mb-6">
+          {supervisorData && (
+            <div className="flex items-center gap-3 bg-gray-800 p-3 rounded-lg">
+              <div className="text-white">
+                <h2 className="font-medium">{supervisorData.nombre || 'Supervisor'}</h2>
+                <p className="text-sm text-gray-400">{supervisorData.email}</p>
+              </div>
+              <Button
+                onClick={() => navigate('/auth')}
+                variant="destructive"
+                size="sm"
+                className="ml-auto"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Cerrar Sesión
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Estadísticas generales */}
-        <div className="grid gap-4 md:grid-cols-4 mb-8">
-          <StatCard
-            title="Total de Promotores"
-            value={afiliados.length}
-            icon={<Users className="h-4 w-4" />}
-          />
+        <div className="grid gap-6 mb-8 md:grid-cols-2 xl:grid-cols-3">
           <StatCard
             title="Total de Afiliados"
             value={getTotalAfiliados()}
-            icon={<UserCheck className="h-4 w-4" />}
+            icon={<Users className="h-4 w-4" />}
           />
           <StatCard
-            title="Promedio de Afiliados"
+            title="Promedio por Promotor"
             value={getPromedioAfiliados()}
             icon={<Target className="h-4 w-4" />}
-            description="Por promotor"
           />
           <StatCard
             title="Mejor Promotor"
-            value={mejorPromotor ? mejorPromotor.afiliados.length : 0}
+            value={getMejorPromotor()?.promotorInfo?.nombre || 'N/A'}
+            subValue={`${getMejorPromotor()?.afiliados.length || 0} afiliados`}
             icon={<TrendingUp className="h-4 w-4" />}
-            description={mejorPromotor?.promotorInfo?.nombre || 'No hay datos'}
           />
         </div>
 
-        {/* Lista de promotores */}
-        <h2 className="text-xl font-semibold mb-4">Promotores Asignados</h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {afiliados.map((promotor: any) => (
-            <PromotorCard
-              key={promotor.promotorId}
-              promotor={promotor}
-              onEditLimit={(id, currentLimit) => {
-                setEditingPromotor(promotor);
-                setNuevoLimite(currentLimit);
-              }}
-              onViewAfiliados={(id, nombre) => {
-                navigate(`/afiliados/${id}`);
-              }}
-            />
-          ))}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-white">Promotores Asignados</h2>
+          <Button
+            onClick={printPromotores}
+            variant="outline"
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Imprimir Lista
+          </Button>
         </div>
 
+        {loading ? (
+          <div className="text-center text-white">Cargando...</div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {afiliados.map((promotor) => (
+              <PromotorCard
+                key={promotor.promotorId}
+                promotor={promotor}
+                onEditLimit={() => handleEditPromotor(promotor)}
+                onViewAfiliados={(promotorId, promotorNombre) => navigate(`/afiliados/${promotorId}`)}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Modal para editar límite */}
-        <Dialog open={!!editingPromotor} onOpenChange={() => setEditingPromotor(null)}>
+        <Dialog open={!!editingPromotor} onOpenChange={(open) => !open && setEditingPromotor(null)}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Editar Límite de Afiliados</DialogTitle>
             </DialogHeader>
-            <div className="py-4">
-              <Input
-                type="number"
-                value={nuevoLimite}
-                onChange={(e) => setNuevoLimite(parseInt(e.target.value))}
-                min={1}
-                className="w-full"
-              />
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Promotor: {editingPromotor?.promotorInfo?.nombre || editingPromotor?.promotorInfo?.email}
+                </label>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    value={nuevoLimite}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (!isNaN(value) && value >= 0) {
+                        setNuevoLimite(value);
+                      }
+                    }}
+                    placeholder="Nuevo límite de afiliados"
+                  />
+                </div>
+                {editingPromotor && (
+                  <p className="text-sm text-muted-foreground">
+                    Afiliados actuales: {editingPromotor.afiliados.length}
+                  </p>
+                )}
+                {nuevoLimite < (editingPromotor?.afiliados?.length || 0) && (
+                  <p className="text-sm text-destructive">
+                    Advertencia: El nuevo límite es menor que el número actual de afiliados
+                  </p>
+                )}
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditingPromotor(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setEditingPromotor(null)}
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleUpdateLimite}>
+              <Button
+                onClick={handleUpdateLimite}
+                disabled={nuevoLimite <= 0}
+              >
                 Guardar cambios
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </main>
+      </div>
     </div>
   );
 };

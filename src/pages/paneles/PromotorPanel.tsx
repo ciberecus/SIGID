@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -7,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import Header from '@/components/Header';
+import CredencialAfiliado from '@/components/credencial/CredencialAfiliado';
 import {
   User,
   UserPlus,
@@ -170,9 +170,6 @@ const PromotorPanel = () => {
   const handlePrintCredencial = (afiliado: Afiliado) => {
     setSelectedAfiliado(afiliado);
     setShowCredencial(true);
-    setTimeout(() => {
-      window.print();
-    }, 100);
   };
 
   const handleShowDetails = (afiliado: Afiliado) => {
@@ -188,39 +185,6 @@ const PromotorPanel = () => {
       day: 'numeric'
     });
   };
-
-  const Credencial = ({ afiliado }: { afiliado: Afiliado }) => (
-    <div className="print:block hidden p-4 bg-white rounded-lg shadow-lg w-[340px] h-[200px] border-2 border-gray-300">
-      <div className="flex justify-between">
-        <div>
-          <h3 className="font-bold text-lg">Credencial de Afiliado</h3>
-          <p className="text-sm mt-2">
-            <span className="font-bold">Nombre:</span> {afiliado.nombre} {afiliado.apellido_paterno} {afiliado.apellido_materno}
-          </p>
-          <p className="text-sm">
-            <span className="font-bold">CURP:</span> {afiliado.curp}
-          </p>
-          <p className="text-sm">
-            <span className="font-bold">Clave Elector:</span> {afiliado.clave_elector}
-          </p>
-          <p className="text-sm">
-            <span className="font-bold">Categoría:</span> {afiliado.categoria}
-          </p>
-        </div>
-        {afiliado.fotografia && (
-          <img 
-            src={afiliado.fotografia} 
-            alt="Foto del afiliado" 
-            className="w-24 h-24 object-cover rounded-lg"
-          />
-        )}
-      </div>
-      <div className="mt-2 text-xs text-gray-600">
-        <p>{afiliado.direccion}</p>
-        {afiliado.telefono && <p>Tel: {afiliado.telefono}</p>}
-      </div>
-    </div>
-  );
 
   const DetallesAfiliado = ({ afiliado }: { afiliado: Afiliado }) => (
     <div className="space-y-4">
@@ -402,7 +366,11 @@ const PromotorPanel = () => {
       </div>
 
       {showCredencial && selectedAfiliado && (
-        <Credencial afiliado={selectedAfiliado} />
+        <CredencialAfiliado 
+          afiliado={selectedAfiliado}
+          open={showCredencial}
+          onClose={() => setShowCredencial(false)}
+        />
       )}
 
       <Dialog open={showDetails} onOpenChange={setShowDetails}>

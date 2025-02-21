@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,6 +9,7 @@ import RegistroAfiliado from "./pages/RegistroAfiliado";
 import AdminPanel from "./pages/paneles/AdminPanel";
 import SupervisorPanel from "./pages/paneles/SupervisorPanel";
 import PromotorPanel from "./pages/paneles/PromotorPanel";
+import AfiliadosLista from "./pages/AfiliadosLista";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +26,7 @@ const App = () => (
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/supervisor" element={<SupervisorPanel />} />
           <Route path="/promotor" element={<PromotorPanel />} />
+          <Route path="/afiliados/:promotorId" element={<AfiliadosLista />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
